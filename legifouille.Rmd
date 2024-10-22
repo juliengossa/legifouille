@@ -1,0 +1,120 @@
+---
+title: "CPESR"
+author: "CPESR"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+options(dplyr.summarise.inform = FALSE)
+knitr::opts_chunk$set(fig.retina = 2)
+
+library(tidyverse)
+library(ggcpesrthemes)
+theme_set(theme_cpesr())
+theme_cpesr_setup(authors = "Julien Gossa", source = "Base LEGI https://www.data.gouv.fr/fr/datasets/legi-codes-lois-et-reglements-consolides/")
+```
+
+## Versions 
+
+```{r load}
+mandats <- read.csv("data/elections.csv") %>% 
+  mutate(président = factor(président,levels=président))
+
+versions <- read.csv2("data/fr-legi-codes-en-vigueur-versions.csv") %>%
+  mutate(across(c(code,etat), as.factor)) %>%
+  mutate(partie = factor(ifelse(str_sub(num,1,1)=="L","Législative","Réglementaire"))) %>%
+  mutate(across(c(code,num,partie), ~ factor(.x,levels=unique(.x)))) %>%
+  bind_rows(mandats %>% rename(debut=date)) %>%
+  arrange(debut) %>%
+  fill(président, .direction = "down") %>%
+  filter(!is.na(num)) %>%
+  arrange(code,num,debut)
+
+colnames(versions)
+```
+
+```{r versions, results='asis', fig.width=10, fig.height=80, fig.asp=NULL}
+versions %>% 
+  mutate(année = as.numeric(str_sub(debut,1,4))) %>%
+  summarise(versions = n_distinct(debut), .by = c(code,partie,président)) %>%
+  ggplot_sd(aes(x=président,y=versions,fill=partie)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~code, scales = "free", ncol = 3) +
+  ggtitle("Nombre de versions des codes legislatifs par mandats présidentiels", subtitle = "Législative et réglementaire") +
+  cpesr_cap()
+```
+
+
+## Liens
+
+- CITATION+cible = cite
+- CITATION+source = cité par
+- ABROGATION+cible = abrogé par
+
+
+```{r load.textes}
+liens <- read.csv2("data/fr-legi-codes-en-vigueur-liens.csv") %>%
+  mutate(across(c(code,lien_typelien,lien_sens,lien_naturetexte), as.factor))
+```
+
+```{r, results='asis'}
+liens %>% 
+  summarise(Nombre = n(), .by = c(lien_typelien,lien_sens)) %>%
+  arrange(lien_typelien,lien_sens) %>%
+  spoiler_table("liste des natures",trim = Inf)
+```
+```{r}
+knitr::knit_exit()
+```
+
+```{r liensmodifs}
+liens %>%
+  filter(lien_typelien == "MODIFIE") %>%
+  summarise(n_modifs = n_distinct(article_num, na.rm = TRUE), .by = c(code,lien_naturetexte,lien_datesignatexte)) %>%
+  bind_rows(mandats %>% rename(lien_datesignatexte=date))%>%
+  arrange(lien_datesignatexte) %>%
+  fill(président, .direction = "down") %>%
+  filter(!is.na(n_modifs)) 
+
+colnames(lfliensmod)
+```
+
+```{r liens, results='asis'}
+lfliensmod %>% 
+  summarise(nb_textes = n(), .by = c(lien_naturetexte,président)) %>%
+  ggplot_sd(aes(x=président,y=nb_textes,fill=lien_naturetexte)) +
+  geom_col(position = "dodge") +
+  ggtitle("Nombre de textes modifiants le code de l'éducation", subtitle = "Projection sur le temps restant du mandat actuel, au rythme du mandat actuel") +
+  cpesr_cap()
+```
+
+
+
+```{r mandats.proj, fig.asp=9/16, results='asis'}
+library(lubridate)
+
+lesum <- lfliensmod %>% 
+  summarise(Nombre = n(), .by = c(lien_naturetexte,président)) %>%
+  mutate(Donnée = "Mesurée")
+
+lelast <- lfliensmod %>% filter(président == "Macron 2")
+i <- interval(min(lelast$lien_datesignatexte), max(lelast$lien_datesignatexte))
+projprop = 1 / ((i %/% days(1)) / (365*5))
+
+proj <- lesum %>%
+  filter(président == "Macron 2") %>%
+  mutate(Nombre = Nombre * projprop) %>%
+  mutate(Donnée = "Projection")
+
+bind_rows(lesum,proj) %>%
+  mutate(Donnée = factor(Donnée,levels=c("Projection","Mesurée"))) %>%
+  ggplot_sd(aes(x=lien_naturetexte,y=Nombre,fill=lien_naturetexte,alpha=Donnée)) +
+  geom_col() +
+  facet_grid(.~président) +
+  scale_alpha_manual(values=c(0.6,1)) +
+  ggtitle("Nombre de textes modifiants le code de l'éducation", subtitle = "Projection sur le temps restant du mandat actuel, au rythme du mandat actuel") +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank()) +
+  cpesr_cap()
+```

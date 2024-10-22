@@ -37,18 +37,16 @@ class LEGI:
     lien_keys = [ "id", "typelien", "sens", "datesignatexte", "naturetexte", "numtexte", "num" ]
     lien_header = [ "lien_"+l for l in lien_keys ] + [ "lien_texte", "lien_url" ]
 
-    def __init__(self, liens=False):
-        self.liens = liens
+    def __init__(self, mode="versions"):
+        self.mode = mode
         self.csvwriter = csv.writer(sys.stdout, quoting=csv.QUOTE_MINIMAL, quotechar='"', delimiter=';')
-        if not liens:
+        if mode == "versions":
             self.csvwriter.writerow(["code"]+self.struct_article_header)            
         else:
-            self.csvwriter.writerow(["code"]+self.article_header + self.lien_header)
+            self.csvwriter.writerow(["code","num"] + self.lien_header)
 
         self.errwriter = csv.writer(sys.stderr, quoting=csv.QUOTE_MINIMAL, quotechar='"', delimiter=';')
         self.errwriter.writerow(["code","error","file"])
-
-        self.articles = {}
 
     def get_soup(self, file):
         try:
@@ -65,7 +63,8 @@ class LEGI:
         self.path = self.codes_path+path
         self.root = self.path+"/texte/struct/"+os.listdir(self.path+"/texte/struct/")[0]
         
-        self.articles[self.path] = []
+        self.articles = set()
+        self.liens = {}
 
         self.parse_struct(self.root)
     
@@ -76,14 +75,20 @@ class LEGI:
         struct_articles = soup.findAll("LIEN_ART")
         for struct_article in struct_articles:
             struct_article_data = [ struct_article[key] for key in self.struct_article_keys ]
-            if struct_article['id'] in self.articles[self.path]: continue
-            self.articles[self.path].append(struct_article['id'])
+            if struct_article['id'] in self.articles: continue
+            self.articles.add(struct_article['id'])    
 
-            if not self.liens:
+            if self.mode == "versions":
                 self.csvwriter.writerow([self.code] + struct_article_data)
             else: 
-                if struct_article['etat'] == "VIGUEUR":
-                    self.parse_article_liens(struct_article)
+                liens = self.parse_article_liens(struct_article)
+                
+                if struct_article['num'] not in self.liens: self.liens[struct_article['num']] = set()
+                
+                for lien in liens:
+                    if lien[0] in self.liens[struct_article['num']]: continue
+                    self.liens[struct_article['num']].add(lien[0])
+                    self.csvwriter.writerow([self.code,struct_article['num']] + lien)
 
         sections = soup.findAll("LIEN_SECTION_TA")
         for section in sections:
@@ -92,16 +97,15 @@ class LEGI:
     def parse_article_liens(self, struct_article):
         article = self.get_article(struct_article)
 
-        article_data = [ article.find(key).text for key in self.article_keys ]
-
-        vigueur = (article.find("ETAT").text == "VIGUEUR") 
+        liens = []
         for lien in article.findAll("LIEN"):
-            if lien['typelien'] != "MODIFIE" and not vigueur: continue
             
             lien_data = [ lien[key] for key in self.lien_keys ]
             if lien_data[-2] == "": lien_data[-2] = lien.text.split(" - ")[0]
             url = "https://www.legifrance.gouv.fr/jorf/id/"+lien['cidtexte']
-            self.csvwriter.writerow([self.code] + article_data + lien_data + [lien.text, url])
+            liens.append(lien_data + [lien.text, url])
+
+        return liens
 
     def get_article(self,struct_article):
         num = struct_article['id'].replace("LEGIARTI","")
@@ -119,11 +123,12 @@ def root_to_path(root, path = "LEGI/legi/global/code_et_TNC_en_vigueur/code_en_v
 
 def main():
     parser = argparse.ArgumentParser(description='Parser de la base LEGI')
-    parser.add_argument('-l', '--liens', help='extrait les liens des articles en vigueur plutôt que les versions', action='store_true', default=False)
+    parser.add_argument('-l', '--liens', help='extrait les liens des articles en vigueur plutôt que les versions', 
+                        action='store_const', dest='mode', default="versions", const="liens")
     parser.add_argument('codescsv', type=str, help='Csv file listing the codes to parse', nargs='?', default='data/fr-legi-codes-en-vigueur.csv')
     args = parser.parse_args()
 
-    legi = LEGI(args.liens)
+    legi = LEGI(args.mode)
     with open(args.codescsv, "r") as f:
         codes = csv.DictReader(f, quotechar='"')
         for code in codes:
