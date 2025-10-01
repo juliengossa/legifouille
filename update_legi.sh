@@ -4,6 +4,7 @@ mkdir LEGI
 cd LEGI
 
 alreadydl=`ls *.tar.gz`
+alreadydl="" # pour tout décompresser
 
 wget -r --no-parent -A.tar.gz -nc --no-directories -P . https://echanges.dila.gouv.fr/OPENDATA/LEGI/ 
 
@@ -13,7 +14,8 @@ if [ `ls Freemium* | wc -l` -ne 1 ]; then
 fi
 
 if [[ $alreadydl != *Freemium* ]]; then
-    tar -xvf  Freemium* ./legi/global/code_et_TNC_en_vigueur
+    echo "Freemium"
+    tar -xvf  Freemium* legi/global/code_et_TNC_en_vigueur/ > /dev/null
 fi
 
 for f in `ls -1 LEGI*.tar.gz`; do

@@ -25,7 +25,7 @@ mandats <- read.csv("data/elections.csv") %>%
 versions <- read.csv2("data/fr-legi-codes-en-vigueur-versions.csv") %>%
   mutate(across(c(code,etat), as.factor)) %>%
   mutate(partie = factor(ifelse(str_sub(num,1,1)=="L","Législative","Réglementaire"))) %>%
-  mutate(across(c(code,num,partie), ~ factor(.x,levels=unique(.x)))) %>%
+  mutate(across(c(code,partie), ~ factor(.x,levels=unique(.x)))) %>%
   bind_rows(mandats %>% rename(debut=date)) %>%
   arrange(debut) %>%
   fill(président, .direction = "down") %>%
@@ -42,6 +42,17 @@ versions %>%
   ggplot_sd(aes(x=président,y=versions,fill=partie)) +
   geom_col(position = "dodge") +
   facet_wrap(~code, scales = "free", ncol = 3) +
+  ggtitle("Nombre de versions des codes legislatifs par mandats présidentiels", subtitle = "Législative et réglementaire") +
+  cpesr_cap()
+```
+
+
+```{r versions2, results='asis'}
+versions %>% 
+  mutate(année = as.numeric(str_sub(debut,1,4))) %>%
+  summarise(versions = n_distinct(debut), .by = c(partie,président)) %>%
+  ggplot_sd(aes(x=président,y=versions,fill=partie)) +
+  geom_col(position = "fill") +
   ggtitle("Nombre de versions des codes legislatifs par mandats présidentiels", subtitle = "Législative et réglementaire") +
   cpesr_cap()
 ```

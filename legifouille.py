@@ -54,7 +54,7 @@ class LEGI:
                 soup = BeautifulSoup(f.read(),features="xml")
             return soup
         except:
-            self.errwriter.writerow([self.code, "Missing file", file])
+            self.errwriter.writerow([self.code, self.path, "Missing file", file])
             return BeautifulSoup()
 
 
@@ -108,7 +108,7 @@ class LEGI:
         return liens
 
     def get_article(self,struct_article):
-        num = struct_article['id'].replace("LEGIARTI","")
+        num = struct_article['id'].replace("LEGIARTI","").strip()
         sp = "/".join([ num[i:i+2] for i in range(0,10,2) ])
 
         apath = self.path + "/article/"+struct_article['origine']+"/ARTI/" + sp + "/" + struct_article['id'] + ".xml"

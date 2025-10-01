@@ -1,0 +1,315 @@
+---
+title: "CPESR"
+author: "CPESR"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+options(dplyr.summarise.inform = FALSE)
+knitr::opts_chunk$set(fig.asp = 9/16, fig.retina = 2)
+
+library(tidyverse)
+library(ggcpesrthemes)
+theme_set(theme_cpesr())
+theme_cpesr_setup(authors = "Julien Gossa", source = "https://github.com/cpesr/RFC/")
+```
+
+
+
+
+```{r load}
+lecode <- "Code de l'éducation"
+date_update <- "2025-09-30"
+
+mandats <- read.csv("data/elections.csv") %>% 
+  mutate(président = factor(président,levels=président)) %>%
+  mutate(progression = ifelse(date != max(date), 1,
+                              as.numeric(as.Date(date_update) - as.Date(date)) / (365.25*5)
+  ))
+
+codever.tmp <- read.csv2("data/fr-legi-codes-en-vigueur-versions.csv") %>%
+  filter(code == lecode) %>%
+  filter(num != "Annexe") %>% # A vérifier
+  #filter(etat != "MODIFIE_MORT_NE") %>% # A vérifier, sémantique pas claire.
+  mutate(across(c(code,etat), as.factor)) %>%
+  mutate(partie = factor(ifelse(str_sub(num,1,1)=="L","Législative","Réglementaire"))) %>%
+  mutate(across(c(code,partie), ~ factor(.x,levels=unique(.x))))
+
+codever <- codever.tmp %>% 
+  select(-c(id)) %>%
+  pivot_longer(c(debut,fin), names_to = "date_type", values_to = "date") %>% 
+  mutate("action" = case_when(
+    date == min(date) ~ "Création",
+    etat %in% c("ABROGE","ABROGE_DIFF") & date_type == "fin" ~ "Abrogation",
+    TRUE ~ "Modification"),
+    .by=num
+  ) %>%
+  select(-etat,-date_type) %>%
+  filter(date != "2999-01-01") %>%
+  arrange(num,date) %>%
+  slice_tail(n=1, by=c(num,date)) %>% 
+  mutate(version = row_number(), .by=num)
+```
+
+
+
+## `r lecode`
+
+```{r versions, results='asis'}
+codever_mandats <- codever %>%
+  bind_rows(mandats)%>%
+  arrange(date) %>%
+  fill(président, .direction = "down") %>%
+  fill(progression, .direction = "down") %>%
+  filter(!is.na(num)) 
+  
+df <- codever_mandats %>% 
+  summarise(Nombre_versions = n_distinct(date),
+            Nombre_modifications = n(),
+            .by = c(code,partie,président,progression)) 
+
+bind_rows(
+  df %>% mutate(Données = "Consolidées"),
+  df %>%
+    filter(progression < 1) %>%
+    mutate(Nombre_versions = Nombre_versions * (1-progression)) %>%
+    mutate(Données = "Projections")
+) %>%
+  ggplot_sd(aes(x=président,y=Nombre_versions,fill=partie,alpha=Données)) +
+  geom_col(position = position_stack(reverse = TRUE)) +
+  ggtitle(paste("Nombre de versions du",lecode,"par mandats présidentiels"), subtitle = "Législative et réglementaire") +
+  scale_alpha_manual(values=c(0.9,0.5)) +
+  cpesr_cap()
+```
+
+
+```{r modifications, results='asis'}
+bind_rows(
+  df %>% mutate(Données = "Consolidées"),
+  df %>%
+    filter(progression < 1) %>%
+    mutate(Nombre_modifications = Nombre_modifications * (1-progression)) %>%
+    mutate(Données = "Projections")
+) %>%
+  ggplot_sd(aes(x=président,y=Nombre_modifications,fill=partie,alpha=Données)) +
+  geom_col(position = position_stack(reverse = TRUE)) +
+  ggtitle(paste("Nombre de modifications du",lecode,"par mandats présidentiels"), subtitle = "Législative et réglementaire") +
+  scale_alpha_manual(values=c(0.9,0.5)) +
+  cpesr_cap()
+```
+```{r taille_modifications, results='asis'}
+codever_mandats %>% 
+  summarise(Nombre_modifications_par_version = n(),
+            .by = c(code,partie,président,date))  %>%
+  ggplot_sd(aes(x=président,y=Nombre_modifications_par_version,fill=partie)) +
+  geom_boxplot() +
+  ggtitle(paste("Nombre de modifications par version du",lecode,"par mandats présidentiels"), subtitle = "Législative et réglementaire") +
+  scale_y_log10() +
+  cpesr_cap()
+```
+
+## Taux de modification
+
+```{r}
+## Etat du code à 23h59 après les modifications de la journée
+code_state_at <- function(code, at_date) {
+  code %>%
+    filter(date <= at_date) %>%
+    slice_max(date, n=1, by=num) 
+    # filter(action != "Abrogation")
+}
+
+# codever %>% code_state_at("2020-09-01") %>% View()
+```
+
+
+```{r}
+code_state_diff <- function(codever, date_start, date_end) {
+  full_join(
+    codever %>% code_state_at(date_start) %>% rename_with(~paste0("start_",.x),date:version),
+    codever %>% code_state_at(date_end) %>% rename_with(~paste0("end_",.x),date:version) ) %>%
+  mutate( 
+    state = factor(case_when(
+      start_version == end_version ~ "Conservé",
+      end_action == "Abrogation" ~ "Supprimé",
+      is.na(start_action) ~ "Ajouté",
+      TRUE ~ "Modifié"
+    ),
+    levels = c("Conservé","Modifié","Ajouté","Supprimé")),
+    nb_version = end_version - replace_na(start_version,0)
+  ) %>%
+  filter(!(state == "Conservé" & end_action == "Abrogation"))
+}
+
+# code_state_diff(codever,"2020-01-01","2025-01-01") %>% View()
+```
+
+```{r scolarite}
+niveaux <- c("Maternelle PS", "Maternelle GS", "CP", "CE1", "CE2", "CM1", "CM2", "6ème", "5ème", "4ème", "3ème", "Seconde", "Première", "Terminale")
+trimestres = c("1er trimestre", "2ème trimestre", "3ème trimestre","grandes vacances")
+niveaux <- factor(niveaux,levels=niveaux)
+trimestres <- factor(trimestres,levels=trimestres)
+
+scolarite <- function(from="2011-09-01") {
+  d <- as.Date(from)
+  crossing(niveaux,trimestres) %>%
+    mutate(label = paste(niveaux,trimestres,sep=" - ")) %>%
+    mutate(date = d %m+% months(3*(row_number()-1)))
+}  
+# scolarite() %>% View()
+```
+
+```{r, cache=TRUE}
+code_stats <- function(codever, date_start,date_end) {
+  codever %>% 
+    code_state_diff(date_start, date_end) %>% 
+    summarize(nombre_articles = n(), .by=state) %>%
+    mutate(part_articles = nombre_articles / sum(nombre_articles))
+}
+
+code_stats_flat <- function(codever, date_start,date_end) {
+  codever %>%
+    code_stats(date_start,date_end) %>%
+    select(-nombre_articles) %>% 
+    pivot_wider(names_from = state, values_from = part_articles)
+}
+
+scolstats <- scolarite() %>%
+  #head(n=3) %>%
+  mutate(first_date = first(date)) %>%
+  rowwise() %>%
+  mutate(data = list(code_stats_flat(codever, first_date, date))) %>%
+  unnest_wider(data)
+```
+
+```{r, results='asis'}
+scolstats %>%
+  pivot_longer(c(Conservé,Modifié,Supprimé,Ajouté), names_to = "Etat", values_to = "Part des articles") %>%
+  ggplot_sd(aes(x=date,y=`Part des articles`,fill=Etat)) +
+  geom_area()
+  
+```
+
+## Waffles
+
+```{r}
+## lecode inutile
+waffle <- function(lecode="code de l'éducation",
+                         from="2011-09-01", to="2025-06-01",
+                         width=100, height=0, addtitle="") {
+  
+  df <- code_state_diff(codever,from,to)
+  
+  stats <- df %>% 
+    summarise(nb = n(), .by = state) %>%
+    complete(state, fill=list(nb = 0)) %>%
+    mutate(part = nb / sum(nb)) %>%
+    mutate(label = scales::percent(part,accuracy=1))
+  
+  statslab <- stats$label
+  names(statslab) <- stats$state
+  
+  #return(stats)
+    
+  df %>%
+    mutate(x = (row_number()-1) %% width, y = floor((row_number()-1) / width)) %>%
+    ggplot(aes(x=x,y=y,fill=state)) +
+    geom_tile(width=1,height=1, color="white") +
+    expand_limits(y=height) +
+    scale_y_reverse() +
+    scale_fill_manual(values=c("aquamarine","darkorange","darkorchid1","deepskyblue"),
+                      limits = c("Conservé","Modifié","Ajouté","Supprimé"),
+                      name="Article") +
+    theme_void() +
+    theme(legend.position = "top", 
+          plot.title = element_text(hjust=0.5), plot.subtitle = element_text(hjust=0.5),
+          legend.margin=margin(t=0.5, b=0, unit='cm'),
+          plot.margin=margin(t=0.3, b=0, unit='cm')) +
+    labs(title = paste("Articles du",lecode,"entre",from,"et",to,addtitle),
+            subtitle = paste("Conservés : ",statslab[['Conservé']],
+                             ", Modifiés : ",statslab[['Modifié']],
+                             ", Ajoutés : ",statslab[['Ajouté']],
+                             ", Supprimés : ",statslab[['Supprimé']]),
+            caption = "Julien Gossa, Camille Noûs, CPESR  |  Source : Base LEGI  ")
+}
+
+waffle()
+waffle(from="2017-06-01",to="2017-06-01")
+```
+
+
+```{r waffgif, fig.asp=9/16}
+waffle.pngs <- function(lecode="code de l'éducation",
+                        from="2017-06-01", to="2023-06-01", 
+                        width=100, height=0, delay=1, pause=3,
+                        keeppng=FALSE) {
+  dir.create("pngs")
+  d <- as.Date(from)
+  pngs <- c()
+  while(d <= to) {
+    print(d)
+    fn <- paste0("pngs/waffle-",d,".png")
+    if(!keeppng) {
+      p <- waffle(lecode,from=from,to=d,width=width,height=height)
+      ggsave(p, filename=fn, bg="white", width = 6, height = 6)
+    }
+    pngs <- c(pngs,fn)
+    #d <- d %m+% months(12)
+    d <- d %m+% months(1)
+  }
+  pngs <- c(rep(pngs[1],pause),pngs,rep(pngs[length(pngs)],pause*2))
+  gifski::gifski(pngs,paste0(lecode,".gif"),width = 800, height = 800, delay = delay)
+}
+
+waffle.pngs(from="2017-06-01", to="2025-10-01", width=100, height=57, delay = 0.3, pause=8, keeppng = FALSE)
+```
+
+
+
+```{r waffscol, fig.asp=9/16}
+waffle.scol <- function(width=100, height=0, delay=1, pause=3,
+                        keeppng=FALSE) {
+  lecode <- "code de l'éducation"
+  dir.create("pngs")
+  scol <- scolarite()
+  pngs <- c()
+  
+  from <- scol[1,]$date
+  for(i in 1:nrow(scol)) { 
+    niv <- scol[i,]$label
+    to <- scol[i,]$date
+    fn <- paste0("pngs/scol-",to,".png")
+    print(niv)
+    p <- waffle(lecode,from=from,to=to,width=width,height=height,addtitle=paste0("\n",niv))
+    ggsave(p, filename=fn, bg="white", width = 6, height = 6)
+    pngs <- c(pngs,fn)
+  }
+  pngs <- c(rep(pngs[1],pause),pngs,rep(pngs[length(pngs)],pause*2))
+  gifski::gifski(pngs,paste0("scolarite.gif"),width = 800, height = 800, delay = delay)
+}
+
+waffle.scol(width=100, height=60, delay = 0.3, pause=8, keeppng = TRUE)
+```
+
+
+## Cas à faire remonter :
+
+- https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006524680/2002-01-18
+
+```{r}
+codever.tmp %>% filter(num == "D337-29")
+```
+
+ABROGE démarre avant la fin de la ligne précédente. Sur le portail "abrogé" n'apparait pas.
+
+Cas concernés :
+```{r}
+codever.tmp %>% group_by(num) %>% arrange(debut) %>% filter(debut<lag(fin))
+```
+
+- 431-3 et 431-17 sans préfix. L635-2 avec une tabulation en préfix.
+https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000030743703
+
+- Quest-ce que "MORT_NE" ?
