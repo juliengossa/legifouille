@@ -3,6 +3,8 @@ title: "CPESR"
 author: "CPESR"
 date: "`r Sys.Date()`"
 output: github_document
+params:
+  lecode: "Code de l'éducation"
 ---
 
 ```{r setup, include=FALSE}
@@ -17,10 +19,19 @@ theme_cpesr_setup(authors = "Julien Gossa", source = "https://github.com/cpesr/R
 ```
 
 
+```{r helpers}
+slugify <- function(x) {
+  x |>
+    tolower() |>
+    stringi::stri_trans_general("Latin-ASCII") |>  # enlève accents
+    gsub("[^a-z0-9]+", "-", x = _) |>              # remplace tout ce qui n’est pas alphanum par -
+    gsub("^-|-$", "", x = _)                       # trim tirets au début/fin
+}
+```
 
 
 ```{r load}
-lecode <- "Code de l'éducation"
+lecode <- params$lecode
 date_update <- "2025-09-30"
 
 mandats <- read.csv("data/elections.csv") %>% 
@@ -77,7 +88,7 @@ bind_rows(
     mutate(Nombre_versions = Nombre_versions * (1-progression)) %>%
     mutate(Données = "Projections")
 ) %>%
-  ggplot_sd(aes(x=président,y=Nombre_versions,fill=partie,alpha=Données)) +
+  ggplot(aes(x=président,y=Nombre_versions,fill=partie,alpha=Données)) +
   geom_col(position = position_stack(reverse = TRUE)) +
   ggtitle(paste("Nombre de versions du",lecode,"par mandats présidentiels"), subtitle = "Législative et réglementaire") +
   scale_alpha_manual(values=c(0.9,0.5)) +
@@ -93,7 +104,7 @@ bind_rows(
     mutate(Nombre_modifications = Nombre_modifications * (1-progression)) %>%
     mutate(Données = "Projections")
 ) %>%
-  ggplot_sd(aes(x=président,y=Nombre_modifications,fill=partie,alpha=Données)) +
+  ggplot(aes(x=président,y=Nombre_modifications,fill=partie,alpha=Données)) +
   geom_col(position = position_stack(reverse = TRUE)) +
   ggtitle(paste("Nombre de modifications du",lecode,"par mandats présidentiels"), subtitle = "Législative et réglementaire") +
   scale_alpha_manual(values=c(0.9,0.5)) +
@@ -103,7 +114,7 @@ bind_rows(
 codever_mandats %>% 
   summarise(Nombre_modifications_par_version = n(),
             .by = c(code,partie,président,date))  %>%
-  ggplot_sd(aes(x=président,y=Nombre_modifications_par_version,fill=partie)) +
+  ggplot(aes(x=président,y=Nombre_modifications_par_version,fill=partie)) +
   geom_boxplot() +
   ggtitle(paste("Nombre de modifications par version du",lecode,"par mandats présidentiels"), subtitle = "Législative et réglementaire") +
   scale_y_log10() +
@@ -148,6 +159,16 @@ code_state_diff <- function(codever, date_start, date_end) {
 
 ## Waffles
 
+```{r}
+date_from <- "2017-06-01"
+date_to=date_update
+
+df <- code_state_diff(codever,date_from,date_to)
+nb_articles <- nrow(df)
+waffle_width <- ceiling(sqrt(nb_articles / 0.75))
+waffle_height <- ceiling(nb_articles / waffle_width)
+```
+
 ```{r, fig.asp=1}
 ## lecode inutile
 waffle <- function(lecode="code de l'éducation",
@@ -181,7 +202,7 @@ waffle <- function(lecode="code de l'éducation",
           plot.title = element_text(hjust=0.5), plot.subtitle = element_text(hjust=0.5),
           legend.margin=margin(t=0.5, b=0, unit='cm'),
           plot.margin=margin(t=0.3, b=0, unit='cm')) +
-    labs(title = paste("Articles du",lecode,"entre",from,"et",to,addtitle),
+    labs(title = paste("Articles du",lecode,"\nEntre",from,"et",to,addtitle),
             subtitle = paste("Conservés : ",statslab[['Conservé']],
                              ", Modifiés : ",statslab[['Modifié']],
                              ", Ajoutés : ",statslab[['Ajouté']],
@@ -190,20 +211,21 @@ waffle <- function(lecode="code de l'éducation",
 }
 
 # waffle()
-waffle(from="2017-06-01",to=date_update)
+waffle(lecode=lecode, from=date_from,to=date_to, width=waffle_width, height=waffle_height)
 ```
 
 
 ```{r waffgif, fig.asp=9/16}
 waffle.pngs <- function(lecode="code de l'éducation",
-                        from="2017-06-01", to="2023-06-01", 
+                        from="2017-06-01", to="2025-10-01", 
                         width=100, height=0, delay=1, pause=3,
                         keeppng=FALSE) {
   dir.create("pngs")
+  dir.create("gifs")
   d <- as.Date(from)
   pngs <- c()
   while(d <= to) {
-    print(d)
+    message(d)
     fn <- paste0("pngs/waffle-",d,".png")
     if(!keeppng) {
       p <- waffle(lecode,from=from,to=d,width=width,height=height)
@@ -214,10 +236,10 @@ waffle.pngs <- function(lecode="code de l'éducation",
     d <- d %m+% months(1)
   }
   pngs <- c(rep(pngs[1],pause),pngs,rep(pngs[length(pngs)],pause*2))
-  gifski::gifski(pngs,paste0("gifs/",lecode,".gif"),width = 800, height = 800, delay = delay)
+  gifski::gifski(pngs,paste0("gifs/",slugify(lecode),".gif"),width = 800, height = 800, delay = delay)
 }
 
-waffle.pngs(from="2017-06-01", to=date_update, width=100, height=57, delay = 0.3, pause=8, keeppng = FALSE)
+waffle.pngs(lecode=lecode,from=date_from, to=date_to, width=waffle_width, height=waffle_height, delay = 0.3, pause=8, keeppng = FALSE)
 ```
 
 
@@ -226,7 +248,7 @@ if(lecode != "Code de l'éducation") knitr::knit_exit()
 ```
 
 
-```{r, cache=TRUE}
+```{r}
 code_stats <- function(codever, date_start,date_end) {
   codever %>% 
     code_state_diff(date_start, date_end) %>% 
@@ -268,7 +290,7 @@ scolstats <- scolarite() %>%
 ```{r, results='asis'}
 scolstats %>%
   pivot_longer(c(Conservé,Modifié,Supprimé,Ajouté), names_to = "Etat", values_to = "Part des articles") %>%
-  ggplot_sd(aes(x=date,y=`Part des articles`,fill=Etat)) +
+  ggplot(aes(x=date,y=`Part des articles`,fill=Etat)) +
   geom_area()
 ```
 
@@ -286,7 +308,7 @@ waffle.scol <- function(width=100, height=0, delay=1, pause=3,
     niv <- scol[i,]$label
     to <- scol[i,]$date
     fn <- paste0("pngs/scol-",to,".png")
-    print(niv)
+    message(niv)
     p <- waffle(lecode,from=from,to=to,width=width,height=height,addtitle=paste0("\n",niv))
     ggsave(p, filename=fn, bg="white", width = 6, height = 6)
     pngs <- c(pngs,fn)

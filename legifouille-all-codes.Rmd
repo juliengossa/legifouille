@@ -1,0 +1,55 @@
+---
+title: "CPESR"
+author: "CPESR"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setupall, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+options(dplyr.summarise.inform = FALSE)
+knitr::opts_chunk$set(fig.asp = 9/16, fig.retina = 2)
+
+library(tidyverse)
+library(ggcpesrthemes)
+theme_set(theme_cpesr())
+theme_cpesr_setup(authors = "Julien Gossa", source = "https://github.com/cpesr/RFC/")
+```
+
+
+```{r helpersall}
+slugify <- function(x) {
+  x |>
+    tolower() |>
+    stringi::stri_trans_general("Latin-ASCII") |>  # enlève accents
+    gsub("[^a-z0-9]+", "-", x = _) |>              # remplace tout ce qui n’est pas alphanum par -
+    gsub("^-|-$", "", x = _)                       # trim tirets au début/fin
+}
+```
+
+```{r loadall, results='asis'}
+
+codes <- read.csv2("data/fr-legi-codes-en-vigueur-versions.csv")
+allcodes <- unique(codes$code)
+
+#allcodes <- c("Code civil","Code de l'aviation civile")
+
+for (lecode in allcodes) {
+  lecode_slug <- slugify(lecode)
+  out_dir <- file.path("codes", lecode_slug)
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  message(lecode_slug)
+  rmarkdown::render(
+    input = "legifouille-code.Rmd",
+    output_dir = out_dir,
+    output_file = "legifouille-code.md",
+    params = list(lecode = lecode),
+    quiet = TRUE
+  )
+  
+  cat(sprintf("- [%s](%s)\n", lecode, file.path(out_dir, "legifouille-code.md")))
+}
+
+```
+
