@@ -6,7 +6,7 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 options(dplyr.summarise.inform = FALSE)
 knitr::opts_chunk$set(fig.asp = 9/16, fig.retina = 2)
 
@@ -146,55 +146,9 @@ code_state_diff <- function(codever, date_start, date_end) {
 # code_state_diff(codever,"2020-01-01","2025-01-01") %>% View()
 ```
 
-```{r scolarite}
-niveaux <- c("Maternelle PS", "Maternelle GS", "CP", "CE1", "CE2", "CM1", "CM2", "6ème", "5ème", "4ème", "3ème", "Seconde", "Première", "Terminale")
-trimestres = c("1er trimestre", "2ème trimestre", "3ème trimestre","grandes vacances")
-niveaux <- factor(niveaux,levels=niveaux)
-trimestres <- factor(trimestres,levels=trimestres)
-
-scolarite <- function(from="2011-09-01") {
-  d <- as.Date(from)
-  crossing(niveaux,trimestres) %>%
-    mutate(label = paste(niveaux,trimestres,sep=" - ")) %>%
-    mutate(date = d %m+% months(3*(row_number()-1)))
-}  
-# scolarite() %>% View()
-```
-
-```{r, cache=TRUE}
-code_stats <- function(codever, date_start,date_end) {
-  codever %>% 
-    code_state_diff(date_start, date_end) %>% 
-    summarize(nombre_articles = n(), .by=state) %>%
-    mutate(part_articles = nombre_articles / sum(nombre_articles))
-}
-
-code_stats_flat <- function(codever, date_start,date_end) {
-  codever %>%
-    code_stats(date_start,date_end) %>%
-    select(-nombre_articles) %>% 
-    pivot_wider(names_from = state, values_from = part_articles)
-}
-
-scolstats <- scolarite() %>%
-  #head(n=3) %>%
-  mutate(first_date = first(date)) %>%
-  rowwise() %>%
-  mutate(data = list(code_stats_flat(codever, first_date, date))) %>%
-  unnest_wider(data)
-```
-
-```{r, results='asis'}
-scolstats %>%
-  pivot_longer(c(Conservé,Modifié,Supprimé,Ajouté), names_to = "Etat", values_to = "Part des articles") %>%
-  ggplot_sd(aes(x=date,y=`Part des articles`,fill=Etat)) +
-  geom_area()
-  
-```
-
 ## Waffles
 
-```{r}
+```{r, fig.asp=1}
 ## lecode inutile
 waffle <- function(lecode="code de l'éducation",
                          from="2011-09-01", to="2025-06-01",
@@ -216,10 +170,10 @@ waffle <- function(lecode="code de l'éducation",
   df %>%
     mutate(x = (row_number()-1) %% width, y = floor((row_number()-1) / width)) %>%
     ggplot(aes(x=x,y=y,fill=state)) +
-    geom_tile(width=1,height=1, color="white") +
+    geom_tile(width=1,height=1, color="darkgrey") +
     expand_limits(y=height) +
     scale_y_reverse() +
-    scale_fill_manual(values=c("aquamarine","darkorange","darkorchid1","deepskyblue"),
+    scale_fill_manual(values=c("aquamarine","darkorange","darkorchid1","navyblue"),
                       limits = c("Conservé","Modifié","Ajouté","Supprimé"),
                       name="Article") +
     theme_void() +
@@ -235,8 +189,8 @@ waffle <- function(lecode="code de l'éducation",
             caption = "Julien Gossa, Camille Noûs, CPESR  |  Source : Base LEGI  ")
 }
 
-waffle()
-waffle(from="2017-06-01",to="2017-06-01")
+# waffle()
+waffle(from="2017-06-01",to=date_update)
 ```
 
 
@@ -260,12 +214,63 @@ waffle.pngs <- function(lecode="code de l'éducation",
     d <- d %m+% months(1)
   }
   pngs <- c(rep(pngs[1],pause),pngs,rep(pngs[length(pngs)],pause*2))
-  gifski::gifski(pngs,paste0(lecode,".gif"),width = 800, height = 800, delay = delay)
+  gifski::gifski(pngs,paste0("gifs/",lecode,".gif"),width = 800, height = 800, delay = delay)
 }
 
-waffle.pngs(from="2017-06-01", to="2025-10-01", width=100, height=57, delay = 0.3, pause=8, keeppng = FALSE)
+waffle.pngs(from="2017-06-01", to=date_update, width=100, height=57, delay = 0.3, pause=8, keeppng = FALSE)
 ```
 
+
+```{r}
+if(lecode != "Code de l'éducation") knitr::knit_exit()
+```
+
+
+```{r, cache=TRUE}
+code_stats <- function(codever, date_start,date_end) {
+  codever %>% 
+    code_state_diff(date_start, date_end) %>% 
+    summarize(nombre_articles = n(), .by=state) %>%
+    mutate(part_articles = nombre_articles / sum(nombre_articles))
+}
+
+code_stats_flat <- function(codever, date_start,date_end) {
+  codever %>%
+    code_stats(date_start,date_end) %>%
+    select(-nombre_articles) %>% 
+    pivot_wider(names_from = state, values_from = part_articles)
+}
+```
+
+```{r scolarite}
+niveaux <- c("Maternelle PS", "Maternelle GS", "CP", "CE1", "CE2", "CM1", "CM2", "6ème", "5ème", "4ème", "3ème", "Seconde", "Première", "Terminale")
+trimestres = c("1er trimestre", "2ème trimestre", "3ème trimestre","grandes vacances")
+niveaux <- factor(niveaux,levels=niveaux)
+trimestres <- factor(trimestres,levels=trimestres)
+
+scolarite <- function(from="2011-09-01") {
+  d <- as.Date(from)
+  crossing(niveaux,trimestres) %>%
+    mutate(label = paste(niveaux,trimestres,sep=" - ")) %>%
+    mutate(date = d %m+% months(3*(row_number()-1)))
+}  
+# scolarite() %>% View()
+
+scolstats <- scolarite() %>%
+  #head(n=3) %>%
+  mutate(first_date = first(date)) %>%
+  rowwise() %>%
+  mutate(data = list(code_stats_flat(codever, first_date, date))) %>%
+  unnest_wider(data)
+```
+
+
+```{r, results='asis'}
+scolstats %>%
+  pivot_longer(c(Conservé,Modifié,Supprimé,Ajouté), names_to = "Etat", values_to = "Part des articles") %>%
+  ggplot_sd(aes(x=date,y=`Part des articles`,fill=Etat)) +
+  geom_area()
+```
 
 
 ```{r waffscol, fig.asp=9/16}
@@ -287,7 +292,7 @@ waffle.scol <- function(width=100, height=0, delay=1, pause=3,
     pngs <- c(pngs,fn)
   }
   pngs <- c(rep(pngs[1],pause),pngs,rep(pngs[length(pngs)],pause*2))
-  gifski::gifski(pngs,paste0("scolarite.gif"),width = 800, height = 800, delay = delay)
+  gifski::gifski(pngs,paste0("gifs/scolarite.gif"),width = 800, height = 800, delay = delay)
 }
 
 waffle.scol(width=100, height=60, delay = 0.3, pause=8, keeppng = TRUE)
