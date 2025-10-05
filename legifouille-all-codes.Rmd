@@ -28,15 +28,15 @@ slugify <- function(x) {
 ```
 
 ```{r loadall, results='asis'}
-
 codes <- read.csv2("data/fr-legi-codes-en-vigueur-versions.csv")
 allcodes <- unique(codes$code)
 
-#allcodes <- c("Code civil","Code de l'aviation civile")
+# allcodes <- c("Code civil","Code de l'aviation civile")
 
 for (lecode in allcodes) {
   lecode_slug <- slugify(lecode)
   out_dir <- file.path("codes", lecode_slug)
+  message(out_dir)
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   
   message(lecode_slug)
@@ -44,10 +44,11 @@ for (lecode in allcodes) {
     input = "legifouille-code.Rmd",
     output_dir = out_dir,
     output_file = "legifouille-code.md",
-    params = list(lecode = lecode),
-    quiet = TRUE
-  )
-  
+    params = list(lecode = lecode, makegifs = FALSE, rootpath = '../..'),
+    quiet = TRUE,
+    envir = new.env(),
+    knit_root_dir = out_dir
+  )  
   cat(sprintf("- [%s](%s)\n", lecode, file.path(out_dir, "legifouille-code.md")))
 }
 

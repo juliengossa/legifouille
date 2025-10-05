@@ -5,15 +5,13 @@ CPESR
 
 ## Code rural (ancien)
 
-<img src="/home/julien/repos/juliengossa/legifouille/codes/code-rural-ancien/legifouille-code_files/figure-gfm/versions-1.png" width="672" />
+<img src="./legifouille-code_files/figure-gfm/versions-1.png" width="672" />
 
-<img src="/home/julien/repos/juliengossa/legifouille/codes/code-rural-ancien/legifouille-code_files/figure-gfm/modifications-1.png" width="672" />
-<img src="/home/julien/repos/juliengossa/legifouille/codes/code-rural-ancien/legifouille-code_files/figure-gfm/taille_modifications-1.png" width="672" />
-
-## Taux de modification
+<img src="./legifouille-code_files/figure-gfm/modifications-1.png" width="672" />
+<img src="./legifouille-code_files/figure-gfm/taille_modifications-1.png" width="672" />
 
 ## Waffles
 
-<img src="/home/julien/repos/juliengossa/legifouille/codes/code-rural-ancien/legifouille-code_files/figure-gfm/unnamed-chunk-4-1.png" width="672" />
+<img src="./legifouille-code_files/figure-gfm/unnamed-chunk-4-1.png" width="672" />
 
-    ## [1] "/home/julien/repos/juliengossa/legifouille/gifs/code-rural-ancien.gif"
+![](./../../gifs/code-rural-ancien.gif)<!-- -->
