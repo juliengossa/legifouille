@@ -4,7 +4,8 @@ author: "CPESR"
 date: "`r Sys.Date()`"
 output: github_document
 params:
-  lecode: "Code de l'éducation"
+  lecode: "Code de la mutualité"
+  #lecode: "Code de l'éducation"
 ---
 
 ```{r setup, include=FALSE}
@@ -145,7 +146,7 @@ code_state_diff <- function(codever, date_start, date_end) {
     state = factor(case_when(
       start_version == end_version ~ "Conservé",
       end_action == "Abrogation" ~ "Supprimé",
-      is.na(start_action) ~ "Ajouté",
+      is.na(start_action) | start_action == "Abrogation" ~ "Ajouté",
       TRUE ~ "Modifié"
     ),
     levels = c("Conservé","Modifié","Ajouté","Supprimé")),
@@ -190,18 +191,33 @@ waffle <- function(lecode="code de l'éducation",
     
   df %>%
     mutate(x = (row_number()-1) %% width, y = floor((row_number()-1) / width)) %>%
-    ggplot(aes(x=x,y=y,fill=state)) +
+    mutate(Nombre_Versions = as.factor(cut( nb_version,
+      breaks = c(-Inf, 1, 2, 3, 4, Inf),
+      labels = c("1", "2", "3", "4", "5+"),
+      right = TRUE
+    ))) %>%
+    ggplot(aes(x=x,y=y,fill=state,alpha=Nombre_Versions)) + # color=nb_version,
     geom_tile(width=1,height=1, color="darkgrey") +
     expand_limits(y=height) +
     scale_y_reverse() +
     scale_fill_manual(values=c("aquamarine","darkorange","darkorchid1","navyblue"),
                       limits = c("Conservé","Modifié","Ajouté","Supprimé"),
-                      name="Article") +
+                      name="Article", 
+                      drop = FALSE) +
+    #scale_color_distiller(palette="Greys", direction=0) +
+    scale_alpha_discrete(range=c(0.5,1), 
+                         limits = c("1","2","3","4","5+"), 
+                         breaks = c("1","2","3","4","5+"), 
+                         name="Nombre de versions",
+                         drop = FALSE) +
     theme_void() +
-    theme(legend.position = "top", 
+    theme(legend.position = "bottom", 
+          legend.box = "vertical",
+          legend.box.spacing = unit(0, "pt"),
+          legend.spacing.y = unit(0, "pt"),
           plot.title = element_text(hjust=0.5), plot.subtitle = element_text(hjust=0.5),
-          legend.margin=margin(t=0.5, b=0, unit='cm'),
-          plot.margin=margin(t=0.3, b=0, unit='cm')) +
+          legend.margin=margin(t=0.1, b=0, unit='cm'),
+          plot.margin=margin(t=0.1, b=0, unit='cm')) +
     labs(title = paste("Articles du",lecode,"\nEntre",from,"et",to,addtitle),
             subtitle = paste("Conservés : ",statslab[['Conservé']],
                              ", Modifiés : ",statslab[['Modifié']],

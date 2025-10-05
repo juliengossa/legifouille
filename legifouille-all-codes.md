@@ -1,7 +1,7 @@
 CPESR
 ================
 CPESR
-2025-10-04
+2025-10-05
 
 - [Code de l’action sociale et des
   familles](codes/code-de-l-action-sociale-et-des-familles/legifouille-code.md)
